@@ -28,6 +28,7 @@ export function fairnessCSV(cls: ClassEntity, report: FairnessReport): (string |
   rows.push([`统计周数：${report.totalWeeks}`])
   rows.push([
     '姓名',
+    '学号',
     '身高(cm)',
     '视力状况',
     `前${cls.constraints.frontRows}排次数`,
@@ -45,6 +46,7 @@ export function fairnessCSV(cls: ClassEntity, report: FairnessReport): (string |
     const top = r.deskmates[0]
     rows.push([
       r.student.name,
+      r.student.studentNo ?? '',
       r.student.heightCm ?? '',
       visionText[r.student.vision],
       r.frontRowsCount,

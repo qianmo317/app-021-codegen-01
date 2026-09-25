@@ -4,6 +4,7 @@ import { Setup } from './pages/Setup'
 import { Rotations } from './pages/Rotations'
 import { Fairness } from './pages/Fairness'
 import { Print } from './pages/Print'
+import { ParentQuery } from './pages/ParentQuery'
 import { useStore } from './store'
 import { Armchair } from 'lucide-react'
 
@@ -15,7 +16,7 @@ export function App() {
     return <div className="loading">加载本地数据中…</div>
   }
 
-  const printMode = /^\/class\/[^/]+\/print$/.test(path)
+  const printMode = /^\/class\/[^/]+\/(print|query)$/.test(path) || path === '/query'
 
   return (
     <div className={printMode ? 'app app-print' : 'app'}>
@@ -25,10 +26,13 @@ export function App() {
             <Armchair size={20} />
             <span>教室座位轮换编排</span>
           </Link>
+          <Link to="/query" className="topbar-query" title="家长只读查询">
+            家长查询
+          </Link>
           <span className="topbar-note">数据仅保存在本机浏览器 · 不上传任何学生信息</span>
         </header>
       )}
-      <main className={printMode ? 'main main-print' : 'main'}>
+      <main className={printMode ? 'main main-print main-parent' : 'main'}>
         <Route path={path} />
       </main>
     </div>
@@ -37,7 +41,8 @@ export function App() {
 
 function Route({ path }: { path: string }) {
   if (path === '/' || path === '') return <ClassList />
-  const m = path.match(/^\/class\/([^/]+)(\/(setup|rotations|fairness|print))?$/)
+  if (path === '/query') return <ParentQuery />
+  const m = path.match(/^\/class\/([^/]+)(\/(setup|rotations|fairness|print|query))?$/)
   if (m) {
     const id = decodeURIComponent(m[1])
     switch (m[3]) {
@@ -49,6 +54,8 @@ function Route({ path }: { path: string }) {
         return <Fairness classId={id} />
       case 'print':
         return <Print classId={id} />
+      case 'query':
+        return <ParentQuery classId={id} />
       default:
         return <Setup classId={id} />
     }

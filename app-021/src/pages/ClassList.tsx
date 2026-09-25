@@ -94,6 +94,9 @@ export function ClassList() {
                 <Link className="btn" to={`/class/${c.id}/setup`}>
                   配置
                 </Link>
+                <Link className="btn" to={`/class/${c.id}/query`} title="只读查询，可打印/存小图发给家长">
+                  家长查询
+                </Link>
                 <Link className="btn btn-primary" to={`/class/${c.id}/rotations`}>
                   {c.assignments.length ? (
                     <>

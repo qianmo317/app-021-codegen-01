@@ -22,6 +22,7 @@ export type Special = 'hearing' | 'mobility'
 export interface Student {
   id: string
   name: string
+  studentNo?: string // 学号（可选，用于家长查询与重名区分）
   heightCm?: number
   vision: Vision
   special?: Special[]

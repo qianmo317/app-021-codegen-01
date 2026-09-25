@@ -25,18 +25,22 @@ test('空班级名被拦截', async ({ page }) => {
   await expect(page.getByText('请输入班级名称')).toBeVisible()
 })
 
-test('学生姓名必填与重名校验', async ({ page }) => {
+test('学生姓名必填；重名需用学号或备注区分', async ({ page }) => {
   await createClass(page, 'E2E 校验班')
   await page.getByTestId('add-student').click()
   await page.getByTestId('student-save').click()
   await expect(page.getByText('姓名必填')).toBeVisible()
   await page.getByTestId('student-name').fill('张三')
   await page.getByTestId('student-save').click()
-  // 再次添加同名
+  // 再次添加同名但无任何区分信息 → 被拦截
   await page.getByTestId('add-student').click()
   await page.getByTestId('student-name').fill('张三')
   await page.getByTestId('student-save').click()
-  await expect(page.getByText('已存在同名学生')).toBeVisible()
+  await expect(page.getByText('已存在同名学生；请填写学号或备注以便家长区分')).toBeVisible()
+  // 填上学号即可保存（重名允许，靠学号区分）
+  await page.getByTestId('student-no').fill('2024001')
+  await page.getByTestId('student-save').click()
+  await expect(page.getByText('已存在同名学生；请填写学号或备注以便家长区分')).toBeHidden()
 })
 
 test('完整旅程：录学生 → 生成 4 周 → 可复现 → 拖拽交换与撤销 → 历史保留 → 持久化', async ({ page }) => {

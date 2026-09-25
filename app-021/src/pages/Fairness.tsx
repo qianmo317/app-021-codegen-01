@@ -42,6 +42,9 @@ export function Fairness({ classId }: { classId: string }) {
           <Link className="tab" to={`/class/${cls.id}/print`}>
             打印
           </Link>
+          <Link className="tab" to={`/class/${cls.id}/query`}>
+            家长查询
+          </Link>
         </nav>
       </div>
 

@@ -19,7 +19,7 @@ describe('CSV 导出', () => {
     const report = computeFairness(cls)
     const f = fairnessCSV(cls, report)
     expect(f[0][0]).toContain(cls.name)
-    expect(f[3]).toHaveLength(12) // 表头列数
+    expect(f[3]).toHaveLength(13) // 表头列数（含学号）
     expect(f).toHaveLength(3 + 12 + 2) // 班级/周数/表头 + 12 行学生 + 空行 + 说明
     const w = weeksCSV(cls)
     expect(w.length).toBeGreaterThan(cls.assignments.length)

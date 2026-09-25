@@ -62,6 +62,9 @@ export function Setup({ classId }: { classId: string }) {
           <Link className="tab" to={`/class/${cls.id}/print`}>
             打印
           </Link>
+          <Link className="tab" to={`/class/${cls.id}/query`}>
+            家长查询
+          </Link>
         </nav>
       </div>
 
@@ -306,6 +309,7 @@ function StudentTable({
             <thead>
               <tr>
                 <th>姓名</th>
+                <th>学号</th>
                 <th>身高(cm)</th>
                 <th>视力</th>
                 <th>特殊</th>
@@ -320,6 +324,7 @@ function StudentTable({
               {cls.students.map((s) => (
                 <tr key={s.id} data-testid="student-row" data-name={s.name}>
                   <td>{s.name}</td>
+                  <td>{s.studentNo ?? '—'}</td>
                   <td>{s.heightCm ?? '—'}</td>
                   <td>{visionLabel(s.vision) || '—'}</td>
                   <td>{specialLabel(s.special) || '—'}</td>
@@ -384,11 +389,21 @@ function StudentModal({
       setNameError('姓名必填')
       return
     }
-    if (!student.id && cls.students.some((s) => s.name === name)) {
-      setNameError('已存在同名学生')
+    const studentNo = draft.studentNo?.trim()
+    if (studentNo) {
+      const clash = cls.students.find((s) => s.id !== student.id && (s.studentNo ?? '').trim() === studentNo)
+      if (clash) {
+        setNameError(`学号 ${studentNo} 已被「${clash.name}」使用，学号需唯一`)
+        return
+      }
+    }
+    // 允许重名（家长可按学号/备注区分），但给出提示
+    const nameClash = cls.students.find((s) => s.id !== student.id && s.name === name)
+    if (nameClash && !studentNo) {
+      setNameError('已存在同名学生；请填写学号或备注以便家长区分')
       return
     }
-    onSave({ ...draft, name, id: draft.id || uid() })
+    onSave({ ...draft, name, studentNo: studentNo || undefined, id: draft.id || uid() })
   }
 
   return (
@@ -408,6 +423,17 @@ function StudentModal({
               }}
             />
             {nameError && <span className="error-text">{nameError}</span>}
+          </label>
+          <label>
+            学号（可选，家长查询用）
+            <input
+              value={draft.studentNo ?? ''}
+              data-testid="student-no"
+              onChange={(e) => {
+                setDraft({ ...draft, studentNo: e.target.value })
+                setNameError('')
+              }}
+            />
           </label>
           <label>
             身高 (cm，可选)
@@ -490,6 +516,7 @@ function StudentModal({
                   }}
                 />
                 {o.name}
+                {o.studentNo?.trim() ? `（${o.studentNo.trim()}）` : ''}
               </label>
             ))}
           </div>
@@ -554,28 +581,80 @@ function BulkModal({
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const [name, h, note] = line.split(/[,，\t]/).map((s) => s.trim())
-        const height = h && /^\d+(\.\d+)?$/.test(h) ? Number(h) : undefined
-        return { name, heightCm: height, note }
+        const cells = line.split(/[,，\t]/).map((s) => s.trim())
+        // 身高：纯数字且在 90~220cm 区间（学号一般 4 位以上，借此与「姓名,学号」消歧）
+        const isHeight = (v: string): boolean => /^\d+(\.\d+)?$/.test(v) && Number(v) >= 90 && Number(v) <= 220
+        // 支持：姓名 | 姓名,学号 | 姓名,身高,备注 | 姓名,学号,身高[,备注]
+        if (cells.length >= 4) {
+          const [name, studentNo, h, ...rest] = cells
+          const note = rest.filter(Boolean).join('，')
+          const height = isHeight(h) ? Number(h) : undefined
+          return {
+            name,
+            studentNo: studentNo || undefined,
+            heightCm: height,
+            note: height ? note : [h, note].filter(Boolean).join('，'),
+          }
+        }
+        if (cells.length === 3) {
+          const [first, second, third] = cells
+          // 第 2 列在身高区间 → 旧格式 姓名,身高,备注
+          if (isHeight(second)) {
+            return { name: first, studentNo: undefined, heightCm: Number(second), note: third }
+          }
+          // 姓名,学号,X：X 在身高区间 → 姓名,学号,身高；否则视为备注 → 姓名,学号,备注
+          if (isHeight(third)) {
+            return { name: first, studentNo: second || undefined, heightCm: Number(third), note: undefined }
+          }
+          return { name: first, studentNo: second || undefined, heightCm: undefined, note: third }
+        }
+        const [name, second] = cells
+        if (cells.length === 2) {
+          return isHeight(second)
+            ? { name, studentNo: undefined, heightCm: Number(second), note: undefined }
+            : { name, studentNo: second || undefined, heightCm: undefined, note: undefined }
+        }
+        return { name, studentNo: undefined, heightCm: undefined, note: undefined }
       })
   }, [text])
-  const dupes = parsed.filter((p) => cls.students.some((s) => s.name === p.name)).map((p) => p.name)
+  // 允许重名（家长按学号/备注区分）；学号在班内需唯一
+  const takenNos = new Set(cls.students.map((s) => s.studentNo?.trim()).filter(Boolean) as string[])
+  const noDupes: string[] = []
+  const batchSeen = new Set<string>()
+  for (const p of parsed) {
+    const no = p.studentNo?.trim()
+    if (!no) continue
+    if (takenNos.has(no) || batchSeen.has(no)) noDupes.push(no)
+    batchSeen.add(no)
+  }
+  const dupNames = parsed
+    .map((p) => p.name)
+    .filter((n, i, arr) => arr.indexOf(n) !== i || cls.students.some((s) => s.name === n))
 
   return (
     <div className="modal-mask" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>批量添加学生</h2>
-        <p className="muted small">每行一个学生，可用逗号附加身高与备注：`张三,152,戴眼镜`</p>
+        <p className="muted small">
+          每行一个学生，格式任选：`姓名`、`姓名,学号`、`姓名,身高,备注` 或 `姓名,学号,身高,备注`（逗号 / 中文逗号 / 制表符分隔）。
+          例：`张三,20240315,152,戴眼镜`
+        </p>
         <textarea
           className="textarea"
           rows={10}
           value={text}
           data-testid="bulk-text"
-          placeholder={'张三,152\n李四,148,视力需关注\n王五'}
+          placeholder={'张三,20240315,152\n李四,20240316,148,视力需关注\n王五'}
           onChange={(e) => setText(e.target.value)}
         />
         <p className="muted small">
-          解析到 {parsed.length} 名学生{dupes.length > 0 && <>；与现有名单重名：{dupes.join('、')}（重名将跳过）</>}
+          解析到 {parsed.length} 名学生
+          {noDupes.length > 0 && (
+            <>
+              ；以下学号重复，将跳过：<b className="warn-text">{[...new Set(noDupes)].join('、')}</b>
+            </>
+          )}
+          {dupNames.length > 0 && <>；重名学生可通过学号或备注区分</>}
         </p>
         <div className="modal-actions">
           <span className="spacer" />
@@ -586,13 +665,31 @@ function BulkModal({
             className="btn btn-primary"
             data-testid="bulk-add"
             disabled={parsed.length === 0}
-            onClick={() =>
+            onClick={() => {
+              const used = new Set(takenNos)
               onAdd(
                 parsed
-                  .filter((p) => p.name && !cls.students.some((s) => s.name === p.name))
-                  .map((p) => ({ id: uid(), name: p.name, heightCm: p.heightCm, vision: 'none', mustApartFrom: [], note: p.note }) as Student),
+                  .filter((p) => {
+                    const no = p.studentNo?.trim()
+                    if (!no) return true
+                    if (used.has(no)) return false
+                    used.add(no)
+                    return true
+                  })
+                  .map(
+                    (p) =>
+                      ({
+                        id: uid(),
+                        name: p.name,
+                        studentNo: p.studentNo?.trim() || undefined,
+                        heightCm: p.heightCm,
+                        vision: 'none',
+                        mustApartFrom: [],
+                        note: p.note,
+                      }) as Student,
+                  ),
               )
-            }
+            }}
           >
             <Eraser size={14} style={{ display: 'none' }} /> 添加 {parsed.length} 人
           </button>
