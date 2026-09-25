@@ -103,6 +103,9 @@ export function ClassList() {
                     '开始排座'
                   )}
                 </Link>
+                <Link className="btn" to={`/class/${c.id}/query`} title="只读查询，可打印/存图发给家长">
+                  家长查询
+                </Link>
               </div>
             </div>
           ))}

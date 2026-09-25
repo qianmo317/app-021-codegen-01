@@ -8,6 +8,11 @@ coverage/
 .vscode/
 .idea/
 
+# Playwright 运行产物
+test-results/
+playwright-report/
+blob-report/
+
 # 未成年人信息绝不入库：真实学生名单与座位表导出不提交
 classes/
 exports/

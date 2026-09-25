@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from '../router'
 import { useStore } from '../store'
 import { SeatGrid } from '../components/SeatGrid'
-import { ArrowLeft, Printer } from 'lucide-react'
+import { ArrowLeft, Printer, Search } from 'lucide-react'
 
 export function Print({ classId }: { classId: string }) {
   const { getClass } = useStore()
@@ -47,6 +47,9 @@ export function Print({ classId }: { classId: string }) {
           <button className="btn btn-primary" data-testid="do-print" onClick={() => window.print()} disabled={weeks === 0}>
             <Printer size={15} /> 打印（A4 纵向）
           </button>
+          <Link className="btn" to={`/class/${cls.id}/query`}>
+            <Search size={15} /> 家长查询
+          </Link>
         </div>
         {weeks === 0 && <p className="muted">还没有生成轮换结果，无法打印。先到「轮换结果」页生成。</p>}
       </div>

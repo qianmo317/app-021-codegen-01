@@ -18,13 +18,14 @@
 
 ## 4. 核心功能（MVP）
 1. **班级与座位图**：行数、列数（各 2~12）、过道位置（第 i|i+1 列之间，可多条）、门的方向（左/右，窗在另一侧）、布局模式（行列排座 / 小组围坐）；座位自动标注 `front` / `middle` / `back`（按 1/3 行）、`window`、`door`、`aisle`，小组模式额外带 `group:G{n}`。
-2. **学生名单**：姓名、身高、视力（`none` / `front_required` / `middle_required`）、特殊需求（`hearing` / `mobility`）、学习分层 T1~T3、必须分开的对象列表、固定座位、备注；支持逐条弹窗编辑与「批量粘贴」（每行 `姓名,身高,备注`，逗号 / 中文逗号 / 制表符分隔，重名跳过）。
+2. **学生名单**：姓名、学号（可选，家长查询入口）、身高、视力（`none` / `front_required` / `middle_required`）、特殊需求（`hearing` / `mobility`）、学习分层 T1~T3、必须分开的对象列表、固定座位、备注；支持逐条弹窗编辑与「批量粘贴」（每行 `姓名,学号,身高,备注`，逗号 / 中文逗号 / 制表符分隔；学号/身高/备注均可省略，重名靠学号或备注区分，同名同学号才跳过）。
 3. **配置校验**：生成前跑 `validateClass()`，把「学生多于座位」「固定座位冲突」「前排 / 中间列 / 靠过道容量不足」「固定座位与学生自身需求冲突」等以人话列在 Setup 页顶部。
 4. **轮换生成**：填入周数（1~52，默认 20）与种子，一次生成第 1..N 周；同参数 + 同种子结果完全一致（可复现）。
 5. **手工微调**：在某一周拖拽两个座位交换，拖拽途中实时显示「位置分偏差² 前后值 / 重复同桌对前后值 / 是否违反硬约束」；违反硬约束的交换被拒绝并给出原因；合法交换可一键撤销。
 6. **增量重排**：`重新生成本周`（其余周不变）与 `从本周起重排`（早于该周的周次保持不变），两个入口都在轮换页生成面板上。
 7. **公平性报告**：逐人统计前 N 排次数、前 / 中 / 后 1/3 行次数、中间列次数、平均位置分、最常同桌与同桌次数；全班汇总硬约束违反数、前 N 排次数极差、位置分 Σ偏差²、同桌超 2 次的对、身高序违背。
 8. **导出与打印**：按周座位表 CSV、公平性统计 CSV（带 BOM，Excel 直接打开）；打印页按周渲染 A4 纵向座位表，含讲台方向条与标记说明页脚。
+9. **家长查询（只读）**：选班级 → 选周次 → 按姓名（支持部分匹配）或学号查询；输出该生本周「第几排第几列、周围同学（行列模式：左右同桌隔过道不算 + 前后同列；小组模式：同组 2×2）、本周特殊标记（前/中/后排、靠窗门过道、固定座位、近视/听力/行动不便照顾）」，以及截至该周（含）的前排次数、平均位置分、全班名次（两位小数同分并列，竞赛排名 1,2,2,4）。重名时列出候选人按**学号/备注**二次确认；页面不调用任何写接口。结果卡可**直接打印**（窄版只输出卡片）或用 Canvas 本地绘制**一张 PNG 小图**（`src/lib/cardImage.ts`，零第三方依赖、无网络请求），卡上写明数据只在本机浏览器、不上传。逻辑见 `src/lib/query.ts`。
 
 ## 5. 进阶功能
 - 座位特殊标记（`stage_side` 讲台侧）的界面化标注。
@@ -39,6 +40,8 @@
 /class/:id/rotations       轮换结果（生成面板、周次切换、拖拽微调、侧栏统计）
 /class/:id/fairness        公平性报告（汇总卡片、占比条形图、逐人表格、导出 CSV）
 /class/:id/print           打印座位表（全部周 / 单周，A4 纵向，每周一页）
+/query                     家长查询（先选班级；只读）
+/class/:id/query           家长查询（已锁定班级；可打印/存 PNG）
 ```
 路由是自写的 `useSyncExternalStore` + `history.pushState`（`src/router.tsx`），不引入第三方路由库；无法匹配的路径渲染「页面不存在」。
 
@@ -49,7 +52,7 @@ type Vision  = 'none'|'front_required'|'middle_required'
 type Special = 'hearing'|'mobility'
 
 interface Seat    { id: string /* r{row}c{col} */; row: number /* 0 = 最靠讲台 */; col: number; group?: string; tags: SeatTag[] }
-interface Student { id: string; name: string; heightCm?: number; vision: Vision; special?: Special[];
+interface Student { id: string; name: string; studentNo?: string /* 学号，家长查询/重名区分 */; heightCm?: number; vision: Vision; special?: Special[];
                     tier?: 1|2|3; mustApartFrom: string[]; fixedSeatId?: string; note?: string }
 interface Constraints  { frontRows: number; heightRule: boolean; mixTiers: boolean }
 interface LayoutConfig { rows: number; cols: number; aisles: number[]; mode: 'rows'|'groups'; doorSide: 'left'|'right' }

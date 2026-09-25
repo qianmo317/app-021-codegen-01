@@ -62,6 +62,9 @@ export function Setup({ classId }: { classId: string }) {
           <Link className="tab" to={`/class/${cls.id}/print`}>
             打印
           </Link>
+          <Link className="tab" to={`/class/${cls.id}/query`}>
+            家长查询
+          </Link>
         </nav>
       </div>
 
@@ -306,6 +309,7 @@ function StudentTable({
             <thead>
               <tr>
                 <th>姓名</th>
+                <th>学号</th>
                 <th>身高(cm)</th>
                 <th>视力</th>
                 <th>特殊</th>
@@ -320,6 +324,7 @@ function StudentTable({
               {cls.students.map((s) => (
                 <tr key={s.id} data-testid="student-row" data-name={s.name}>
                   <td>{s.name}</td>
+                  <td>{s.studentNo || '—'}</td>
                   <td>{s.heightCm ?? '—'}</td>
                   <td>{visionLabel(s.vision) || '—'}</td>
                   <td>{specialLabel(s.special) || '—'}</td>
@@ -384,11 +389,22 @@ function StudentModal({
       setNameError('姓名必填')
       return
     }
-    if (!student.id && cls.students.some((s) => s.name === name)) {
-      setNameError('已存在同名学生')
+    const no = (draft.studentNo ?? '').trim()
+    if (no && cls.students.some((s) => s.id !== student.id && (s.studentNo ?? '').trim() === no)) {
+      setNameError('学号与其他学生重复')
       return
     }
-    onSave({ ...draft, name, id: draft.id || uid() })
+    // 允许重名（家长查询时按学号/备注区分）；仅当同名且学号、备注都为空时才拦截
+    if (
+      !student.id &&
+      cls.students.some((s) => s.name === name && !(s.studentNo ?? '').trim() && !(s.note ?? '').trim()) &&
+      !no &&
+      !(draft.note ?? '').trim()
+    ) {
+      setNameError('已存在同名学生：重名需填写学号或备注以便区分')
+      return
+    }
+    onSave({ ...draft, name, studentNo: no || undefined, id: draft.id || uid() })
   }
 
   return (
@@ -408,6 +424,17 @@ function StudentModal({
               }}
             />
             {nameError && <span className="error-text">{nameError}</span>}
+          </label>
+          <label>
+            学号（可选，家长可按学号查询）
+            <input
+              value={draft.studentNo ?? ''}
+              data-testid="student-no"
+              onChange={(e) => {
+                setDraft({ ...draft, studentNo: e.target.value })
+                setNameError('')
+              }}
+            />
           </label>
           <label>
             身高 (cm，可选)
@@ -554,28 +581,56 @@ function BulkModal({
       .map((line) => line.trim())
       .filter(Boolean)
       .map((line) => {
-        const [name, h, note] = line.split(/[,，\t]/).map((s) => s.trim())
-        const height = h && /^\d+(\.\d+)?$/.test(h) ? Number(h) : undefined
-        return { name, heightCm: height, note }
+        const cells = line.split(/[,，\t]/).map((s) => s.trim())
+        const name = cells[0] ?? ''
+        // 「姓名,学号,身高,备注」：身高必须落在 90~220，否则数字按学号处理
+        let studentNo: string | undefined
+        let heightCm: number | undefined
+        let note: string | undefined
+        for (const cell of cells.slice(1)) {
+          if (!cell) continue
+          if (heightCm === undefined && /^\d+(\.\d+)?$/.test(cell)) {
+            const n = Number(cell)
+            if (n >= 90 && n <= 220) {
+              heightCm = n
+              continue
+            }
+            if (studentNo === undefined) {
+              studentNo = cell
+              continue
+            }
+          }
+          if (note === undefined) note = cell
+        }
+        return { name, studentNo, heightCm, note }
       })
   }, [text])
-  const dupes = parsed.filter((p) => cls.students.some((s) => s.name === p.name)).map((p) => p.name)
+  // 与现有名单冲突：同名且学号也相同
+  const dupes = parsed
+    .filter((p) =>
+      cls.students.some((s) => s.name === p.name && (s.studentNo ?? '') === (p.studentNo ?? '')),
+    )
+    .map((p) => p.name)
 
   return (
     <div className="modal-mask" onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <h2>批量添加学生</h2>
-        <p className="muted small">每行一个学生，可用逗号附加身高与备注：`张三,152,戴眼镜`</p>
+        <p className="muted small">
+          每行一个学生：`姓名,学号,身高,备注`（学号、备注可省略，重名请用学号或备注区分），如
+          `张三,03,152,戴眼镜`
+        </p>
         <textarea
           className="textarea"
           rows={10}
           value={text}
           data-testid="bulk-text"
-          placeholder={'张三,152\n李四,148,视力需关注\n王五'}
+          placeholder={'张三,03,152\n李四,148,视力需关注\n王五'}
           onChange={(e) => setText(e.target.value)}
         />
         <p className="muted small">
-          解析到 {parsed.length} 名学生{dupes.length > 0 && <>；与现有名单重名：{dupes.join('、')}（重名将跳过）</>}
+          解析到 {parsed.length} 名学生
+          {dupes.length > 0 && <>；与现有名单同名同学号：{dupes.join('、')}（这些将跳过）</>}
         </p>
         <div className="modal-actions">
           <span className="spacer" />
@@ -586,13 +641,33 @@ function BulkModal({
             className="btn btn-primary"
             data-testid="bulk-add"
             disabled={parsed.length === 0}
-            onClick={() =>
+            onClick={() => {
+              const seen = new Set(
+                cls.students.map((s) => `${s.name}|${s.studentNo ?? ''}`),
+              )
               onAdd(
                 parsed
-                  .filter((p) => p.name && !cls.students.some((s) => s.name === p.name))
-                  .map((p) => ({ id: uid(), name: p.name, heightCm: p.heightCm, vision: 'none', mustApartFrom: [], note: p.note }) as Student),
+                  .filter((p) => {
+                    if (!p.name) return false
+                    const key = `${p.name}|${p.studentNo ?? ''}`
+                    if (seen.has(key)) return false // 与名单或本批次内同名同学号重复
+                    seen.add(key)
+                    return true
+                  })
+                  .map(
+                    (p) =>
+                      ({
+                        id: uid(),
+                        name: p.name,
+                        studentNo: p.studentNo,
+                        heightCm: p.heightCm,
+                        vision: 'none',
+                        mustApartFrom: [],
+                        note: p.note,
+                      }) as Student,
+                  ),
               )
-            }
+            }}
           >
             <Eraser size={14} style={{ display: 'none' }} /> 添加 {parsed.length} 人
           </button>
